@@ -2,15 +2,18 @@
 #include <iostream>
 #include "SDL.h"
 
+const std::string filename = "highscore.txt";
+
 Game::Game(std::size_t grid_width, std::size_t grid_height)
     : snake(grid_width, grid_height),
       engine(dev()),
       random_w(0, static_cast<int>(grid_width - 1)),
-      random_h(0, static_cast<int>(grid_height - 1)) {
+      random_h(0, static_cast<int>(grid_height - 1)),
+      scoreList(ScoreList(filename)) {
   PlaceFood();
 }
 
-void Game::Run(Controller const &controller, Renderer &renderer,
+void Game::Run(Controller const &&controller, Renderer &renderer,
                std::size_t target_frame_duration) {
   Uint32 title_timestamp = SDL_GetTicks();
   Uint32 frame_start;
@@ -18,15 +21,59 @@ void Game::Run(Controller const &controller, Renderer &renderer,
   Uint32 frame_duration;
   int frame_count = 0;
   bool running = true;
-
+  bool enteringName = false;
+  bool showingHighScore = false;
   while (running) {
     frame_start = SDL_GetTicks();
 
     // Input, Update, Render - the main game loop.
     controller.HandleInput(running, snake);
     Update();
-    renderer.Render(snake, food);
-
+    renderer.Render(snake, food, showingHighScore, scoreList);
+    if(!snake.alive && !enteringName)
+    {
+      enteringName = true;
+      //std::thread enterName(&Renderer::EnterName, &renderer);
+      std::thread enterName([&]{
+        std::cout << "Now start thread enter name\n";
+        std::string _name;
+        renderer.UpdateName(_name + std::string("_"));
+        renderer.Render(snake, food, showingHighScore, scoreList);
+        bool _threadRunning = true;
+        SDL_StartTextInput();
+        while ( _threadRunning ) {
+          std::this_thread::sleep_for(std::chrono::milliseconds(1));
+          SDL_Event ev;
+          std::cout << "In _thread running loop\n";
+          while ( SDL_PollEvent( &ev ) ) {
+            if ( ev.type == SDL_TEXTINPUT && _name.size() < maxNameLength) {
+              //std::lock_guard<std::mutex> _lock(_mtx);
+              _name += ev.text.text;
+              renderer.UpdateName(_name + std::string("_"));
+            } else if ( ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_BACKSPACE && _name.size()) {
+              _name.pop_back();
+              renderer.UpdateName(_name + std::string("_"));
+              //renderer.Render(snake, food);
+            } else if ( ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_RETURN){
+              if(!_name.size())
+              {
+                _name = "Player";
+              }
+              renderer.UpdateName(_name + std::string("_"));
+              std::cout << " > " << _name << std::endl;
+              scoreList.AddScore(_name, GetScore());
+              scoreList.SaveHighScore();
+              _threadRunning = false;
+              showingHighScore = true;
+            }
+          }
+          renderer.Render(snake, food, showingHighScore, scoreList);
+        }
+        SDL_StopTextInput();
+      });
+      enterName.join();
+      //renderer.EnterName();
+    } 
     frame_end = SDL_GetTicks();
 
     // Keep track of how long each loop through the input/update/render cycle
@@ -85,3 +132,4 @@ void Game::Update() {
 
 int Game::GetScore() const { return score; }
 int Game::GetSize() const { return snake.size; }
+

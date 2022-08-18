@@ -15,7 +15,7 @@ void Snake::Update() {
   // Update all of the body vector items if the snake head has moved to a new
   // cell.
   if (current_cell.x != prev_cell.x || current_cell.y != prev_cell.y) {
-    UpdateBody(current_cell, prev_cell);
+    UpdateBody(std::move(current_cell), std::move(prev_cell));
   }
 }
 
@@ -43,9 +43,9 @@ void Snake::UpdateHead() {
   head_y = fmod(head_y + grid_height, grid_height);
 }
 
-void Snake::UpdateBody(SDL_Point &current_head_cell, SDL_Point &prev_head_cell) {
+void Snake::UpdateBody(SDL_Point &&current_head_cell, SDL_Point &&prev_head_cell) {
   // Add previous head location to vector
-  body.push_back(prev_head_cell);
+  body.emplace_back(std::move(prev_head_cell));
 
   if (!growing) {
     // Remove the tail from the vector.
@@ -56,24 +56,22 @@ void Snake::UpdateBody(SDL_Point &current_head_cell, SDL_Point &prev_head_cell) 
   }
 
   // Check if the snake has died.
-  for (auto const &item : body) {
-    if (current_head_cell.x == item.x && current_head_cell.y == item.y) {
-      alive = false;
-    }
+  if(std::any_of(body.begin(), body.end(), [&](const SDL_Point &p){return p.x == current_head_cell.x && p.y == current_head_cell.y;}))
+  {
+    alive = false;
   }
 }
 
 void Snake::GrowBody() { growing = true; }
 
-// Inefficient method to check if cell is occupied by snake.
+// Improved checking cell occupied by snake using std::find_if
 bool Snake::SnakeCell(int x, int y) {
   if (x == static_cast<int>(head_x) && y == static_cast<int>(head_y)) {
     return true;
   }
-  for (auto const &item : body) {
-    if (x == item.x && y == item.y) {
-      return true;
-    }
+  if(std::any_of(body.begin(), body.end(), [&](const SDL_Point &p){return p.x == x && p.y == y;}))
+  {
+    return true;
   }
   return false;
 }
